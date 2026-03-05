@@ -20,7 +20,7 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Final Build
+      - name: Build App
         run: |
           rm -rf *
           flutter create --project-name wolf_manager .
@@ -31,11 +31,8 @@ jobs:
 
           void main() => runApp(MaterialApp(
             debugShowCheckedModeBanner: false,
-            theme: ThemeData.dark().copyWith(
-              scaffoldBackgroundColor: const Color(0xFF14302C),
-              primaryColor: Colors.tealAccent,
-            ),
-            home: WolfInteractiveApp(),
+            theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF14302C)),
+            home: WolfApp(),
           ));
 
           class EventItem {
@@ -45,12 +42,12 @@ jobs:
             EventItem({required this.id, required this.time, this.isSelected = true});
           }
 
-          class WolfInteractiveApp extends StatefulWidget {
+          class WolfApp extends StatefulWidget {
             @override
-            _WolfInteractiveAppState createState() => _WolfInteractiveAppState();
+            _WolfAppState createState() => _WolfAppState();
           }
 
-          class _WolfInteractiveAppState extends State<WolfInteractiveApp> {
+          class _WolfAppState extends State<WolfApp> {
             final TextEditingController roomController = TextEditingController(text: "9969");
             DateTime selectedDate = DateTime.now();
             List<EventItem> events = [
@@ -58,31 +55,22 @@ jobs:
               EventItem(id: "753730", time: TimeOfDay(hour: 0, minute: 45)),
               EventItem(id: "753731", time: TimeOfDay(hour: 1, minute: 10)),
               EventItem(id: "753732", time: TimeOfDay(hour: 2, minute: 15)),
-              EventItem(id: "753733", time: TimeOfDay(hour: 3, minute: 00)),
             ];
 
             Future<void> _pickDate() async {
-              DateTime? picked = await showDatePicker(
-                context: context,
-                initialDate: selectedDate,
-                firstDate: DateTime(2025),
-                lastDate: DateTime(2030),
-              );
-              if (picked != null) setState(() => selectedDate = picked);
+              DateTime? p = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime(2025), lastDate: DateTime(2030));
+              if (p != null) setState(() => selectedDate = p);
             }
 
-            Future<void> _pickTime(int index) async {
-              TimeOfDay? picked = await showTimePicker(
-                context: context,
-                initialTime: events[index].time,
-              );
-              if (picked != null) setState(() => events[index].time = picked);
+            Future<void> _pickTime(int i) async {
+              TimeOfDay? p = await showTimePicker(context: context, initialTime: events[i].time);
+              if (p != null) setState(() => events[i].time = p);
             }
 
             @override
             Widget build(BuildContext context) {
               return Scaffold(
-                appBar: AppBar(title: Text("WOLF Event Manager"), centerTitle: true),
+                appBar: AppBar(title: Text("WOLF Event Manager")),
                 body: Column(
                   children: [
                     Padding(
@@ -91,50 +79,27 @@ jobs:
                         children: [
                           Expanded(child: TextField(controller: roomController, decoration: InputDecoration(labelText: "Room ID", border: OutlineInputBorder()))),
                           SizedBox(width: 10),
-                          Expanded(
-                            child: InkWell(
-                              onTap: _pickDate,
-                              child: InputDecorator(
-                                decoration: InputDecoration(labelText: "Date", border: OutlineInputBorder()),
-                                child: Text(DateFormat('yyyy-MM-dd').format(selectedDate)),
-                              ),
-                            ),
-                          ),
+                          Expanded(child: InkWell(onTap: _pickDate, child: InputDecorator(decoration: InputDecoration(labelText: "Date", border: OutlineInputBorder()), child: Text(DateFormat('yyyy-MM-dd').format(selectedDate))))),
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: events.length,
-                        itemBuilder: (c, i) => CheckboxListTile(
-                          activeColor: Colors.tealAccent,
-                          title: Row(
-                            children: [
-                              Text("فعالية ${events[i].id}"),
-                              Spacer(),
-                              TextButton(
-                                style: TextButton.styleFrom(backgroundColor: Colors.black26),
-                                onPressed: () => _pickTime(i),
-                                child: Text(events[i].time.format(context), style: TextStyle(color: Colors.yellowAccent)),
-                              ),
-                            ],
-                          ),
-                          value: events[i].isSelected,
-                          onChanged: (v) => setState(() => events[i].isSelected = v!),
-                        ),
-                      ),
-                    ),
+                    Expanded(child: ListView.builder(
+                      itemCount: events.length,
+                      itemBuilder: (c, i) => CheckboxListTile(
+                        title: Row(children: [Text("فعالية ${events[i].id}"), Spacer(), TextButton(onPressed: () => _pickTime(i), child: Text(events[i].time.format(context), style: TextStyle(color: Colors.yellowAccent)))]),
+                        value: events[i].isSelected,
+                        onChanged: (v) => setState(() => events[i].isSelected = v!),
+                      ))),
                     Padding(
                       padding: const EdgeInsets.all(20.0),
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 55), backgroundColor: Colors.white),
+                        style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 50), backgroundColor: Colors.white),
                         onPressed: () {
-                          String summary = "رقم الروم: ${roomController.text}\nالتاريخ: ${DateFormat('yyyy-MM-dd').format(selectedDate)}\n";
-                          summary += "الفعاليات:\n" + events.where((e) => e.isSelected).map((e) => "${e.id} @ ${e.time.format(context)}").join("\n");
-                          showDialog(context: context, builder: (c) => AlertDialog(content: SelectableText(summary)));
+                          String s = "الروم: ${roomController.text}\nالتاريخ: ${DateFormat('yyyy-MM-dd').format(selectedDate)}\n";
+                          s += events.where((e) => e.isSelected).map((e) => "${e.id} @ ${e.time.format(context)}").join("\n");
+                          showDialog(context: context, builder: (c) => AlertDialog(content: SelectableText(s)));
                         },
-                        child: Text("إنهاء وتصدير", style: TextStyle(color: Colors.black)),
-                      ),
+                        child: Text("إنهاء", style: TextStyle(color: Colors.black))),
                     )
                   ],
                 ),
@@ -147,109 +112,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: wolf-app-final
-          path: build/app/outputs/flutter-apk/app-release.apk
-                        itemCount: events.length,
-                        itemBuilder: (c, i) => CheckboxListTile(
-                          activeColor: Colors.tealAccent,
-                          title: Row(
-                            children: [
-                              Text("فعالية ${events[i].id}"),
-                              Spacer(),
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  backgroundColor: Colors.black26,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                onPressed: () => _pickTime(i),
-                                child: Text(
-                                  events[i].time.format(context),
-                                  style: TextStyle(color: Colors.yellowAccent),
-                                ),
-                              ),
-                            ],
-                          ),
-                          value: events[i].isSelected,
-                          onChanged: (v) => setState(() => events[i].isSelected = v!),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(double.infinity, 55),
-                          backgroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        ),
-                        onPressed: () {
-                          String summary = "رقم الروم: ${roomController.text}\nالتاريخ: ${DateFormat('yyyy-MM-dd').format(selectedDate)}\n";
-                          summary += "الفعاليات المختارة:\n" + events.where((e) => e.isSelected).map((e) => "${e.id} @ ${e.time.format(context)}").join("\n");
-                          showDialog(context: context, builder: (c) => AlertDialog(content: SelectableText(summary)));
-                        },
-                        child: Text("إنهاء وتصدير نصي", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                      ),
-                    )
-                  ],
-                ),
-              );
-            }
-          }
-          EOF
-          
-          flutter build apk --release
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: wolf-app-fixed
-          path: build/app/outputs/flutter-apk/app-release.apk
-                        itemCount: events.length,
-                        itemBuilder: (c, i) => CheckboxListTile(
-                          activeColor: Colors.tealAccent,
-                          title: Row(
-                            children: [
-                              Text("فعالية ${events[i].id}"),
-                              Spacer(),
-                              ActionChip(
-                                label: Text(events[i].time.format(context), style: TextStyle(color: Colors.yellowAccent)),
-                                backgroundColor: Colors.black26,
-                                onTap: () => _pickTime(i),
-                              ),
-                            ],
-                          ),
-                          value: events[i].isSelected,
-                          onChanged: (v) => setState(() => events[i].isSelected = v!),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(double.infinity, 55),
-                          backgroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                        ),
-                        onPressed: () {
-                          String summary = "رقم الروم: ${roomController.text}\nالتاريخ: ${DateFormat('yyyy-MM-dd').format(selectedDate)}\n";
-                          summary += "الفعاليات المختارة:\n" + events.where((e) => e.isSelected).map((e) => "${e.id} @ ${e.time.format(context)}").join("\n");
-                          showDialog(context: context, builder: (c) => AlertDialog(content: SelectableText(summary)));
-                        },
-                        child: Text("إنهاء وتصدير نصي", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-                      ),
-                    )
-                  ],
-                ),
-              );
-            }
-          }
-          EOF
-          
-          flutter build apk --release
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: wolf-app-final
+          name: wolf-app
           path: build/app/outputs/flutter-apk/app-release.apk

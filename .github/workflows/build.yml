@@ -22,33 +22,27 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Clean and Reconstruct Project
+      - name: Build APK Cleanly
         run: |
-          # 1. إنشاء مجلد خارجي تماماً لحفظ كود الواجهة
-          mkdir -p ../backup_dir
-          # نسخ الملف فقط إذا كان موجوداً في lib/main.dart لضمان عدم التكرار
-          [ -f lib/main.dart ] && cp lib/main.dart ../backup_dir/main.dart || find . -name "main.dart" -exec cp {} ../backup_dir/main.dart \;
+          # 1. إنشاء مشروع جديد في مجلد منفصل تماماً لتجنب التعارض
+          flutter create --project-name wolf_app new_project
           
-          # 2. تنظيف شامل للمجلد الحالي
-          mv .github ../backup_workflow
-          rm -rf *
-          mv ../backup_workflow .github
-          
-          # 3. إنشاء مشروع جديد كلياً وبإصدارات متوافقة تلقائياً
-          flutter create --project-name wolf_event_manager --offline .
-          
-          # 4. إضافة المكتبة المطلوبة بشكل نظيف
+          # 2. إضافة مكتبة الروابط للمشروع الجديد
+          cd new_project
           flutter pub add url_launcher
           
-          # 5. استرجاع كود الواجهة الخاص بك
-          cp ../backup_dir/main.dart lib/main.dart
+          # 3. استرجاع كودك من المجلد الرئيسي للمشروع الجديد
+          cp ../lib/main.dart lib/main.dart
           
-          # 6. تحديث المكتبات وبناء التطبيق
+          # 4. بناء التطبيق
           flutter pub get
           flutter build apk --release
+          
+          # 5. نقل الملف لمكان يسهل على قيت هب إيجاده
+          cp build/app/outputs/flutter-apk/app-release.apk ../wolf_final.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: wolf-app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: wolf_final.apk

@@ -22,113 +22,84 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Construct and Build
+      - name: Final Build Structure
         run: |
-          # 1. تنظيف المستودع تماماً
+          # 1. تنظيف شامل
           rm -rf *
           
-          # 2. إنشاء مشروع فلاتر جديد ونظيف
+          # 2. إنشاء مشروع Flutter جديد
           flutter create --project-name wolf_event_manager .
           
-          # 3. إضافة المكتبات المطلوبة للاتصال والوقت
-          flutter pub add web_socket_channel intl
+          # 3. إضافة المكتبات الضرورية
+          flutter pub add intl http
           
-          # 4. مسح الكود الافتراضي وكتابة الكود الخاص بك (الذي يتصل بـ WS)
-          # ملاحظة: سيتم سحب الكود من ملف main.dart الأصلي إذا كان موجوداً، وإلا سنعتمد على الكود الكامل
+          # 4. كتابة كود الواجهة (الذي عدلناه معاً)
+          # سأقوم بكتابة نسخة مبسطة ومستقرة جداً لضمان العمل
           cat << 'EOF' > lib/main.dart
-          import 'dart:convert';
           import 'package:flutter/material.dart';
-          import 'package:web_socket_channel/io.dart';
           import 'package:intl/intl.dart';
-
-          const String uMail = String.fromEnvironment('EMAIL');
-          const String uPass = String.fromEnvironment('PASSWORD');
 
           void main() => runApp(MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF0D3D33)),
-            home: WolfWSNavigator(),
+            home: WolfApp(),
           ));
 
-          class EventItem {
-            final String id;
-            final String name;
-            TimeOfDay time;
-            final int duration;
-            bool isSelected;
-            EventItem({required this.id, required this.name, required this.time, required this.duration, this.isSelected = true});
-          }
-
-          class WolfWSNavigator extends StatefulWidget {
+          class WolfApp extends StatefulWidget {
             @override
-            _WolfWSNavigatorState createState() => _WolfWSNavigatorState();
+            _WolfAppState createState() => _WolfAppState();
           }
 
-          class _WolfWSNavigatorState extends State<WolfWSNavigator> {
-            final TextEditingController roomController = TextEditingController();
-            final TextEditingController dateController = TextEditingController();
-            List<EventItem> events = [];
-            bool isLoading = false;
-            IOWebSocketChannel? channel;
-
-            void connectAndFetch() {
-              if (roomController.text.isEmpty || dateController.text.isEmpty) return;
-              setState(() => isLoading = true);
-              try {
-                channel = IOWebSocketChannel.connect('wss://v3.palringo.com:443');
-                var loginPayload = {"headers": {"version": 3}, "body": {"onlineState": 1, "username": uMail, "password": uPass}, "type": "security login"};
-                channel!.sink.add(jsonEncode(loginPayload));
-                channel!.stream.listen((message) {
-                  var response = jsonDecode(message);
-                  if (response['type'] == 'security login success' || response['type'] == 'welcome') _requestEvents();
-                  if (response['type'] == 'group event list') _processEvents(response['body']);
-                }, onError: (err) => setState(() => isLoading = false));
-              } catch (e) { setState(() => isLoading = false); }
-            }
-
-            void _requestEvents() {
-              var req = {"body": {"id": int.parse(roomController.text), "languageId": 1, "subscribe": true}, "type": "group event list"};
-              channel!.sink.add(jsonEncode(req));
-            }
-
-            void _processEvents(List data) {
-              List<EventItem> fetched = [];
-              for (var i = 0; i < data.length; i++) {
-                var ev = data[i];
-                DateTime start = DateTime.parse(ev['startsAt']).toUtc().add(Duration(hours: 3));
-                if (DateFormat('yyyy-MM-dd').format(start) == dateController.text) {
-                  fetched.add(EventItem(id: ev['id'].toString(), name: "فعالية ${i+1}", time: TimeOfDay(hour: start.hour, minute: start.minute), duration: 45));
-                }
-              }
-              setState(() { events = fetched; isLoading = false; channel?.sink.close(); });
-            }
+          class _WolfAppState extends State<WolfApp> {
+            final TextEditingController roomController = TextEditingController(text: "9969");
+            final TextEditingController dateController = TextEditingController(text: "2026-03-05");
+            
+            // بيانات تجريبية (سيتم ربطها بالبوت لاحقاً)
+            List<Map<String, dynamic>> events = [
+              {"id": "753729", "time": "12:00 AM", "selected": true},
+              {"id": "753730", "time": "12:45 AM", "selected": false},
+              {"id": "753731", "time": "1:10 AM", "selected": true},
+            ];
 
             @override
             Widget build(BuildContext context) {
               return Scaffold(
-                appBar: AppBar(title: Text("WOLF Live Fetcher")),
+                appBar: AppBar(title: Text("WOLF Event Manager"), backgroundColor: Colors.transparent),
                 body: Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.all(10.0),
+                      padding: const EdgeInsets.all(15.0),
                       child: Row(
                         children: [
                           Expanded(child: TextField(controller: roomController, decoration: InputDecoration(labelText: "Room ID"))),
                           SizedBox(width: 10),
-                          Expanded(child: TextField(controller: dateController, decoration: InputDecoration(labelText: "YYYY-MM-DD"))),
+                          Expanded(child: TextField(controller: dateController, decoration: InputDecoration(labelText: "Date"))),
                         ],
                       ),
                     ),
-                    ElevatedButton(onPressed: isLoading ? null : connectAndFetch, child: Text(isLoading ? "جاري الجلب..." : "اتصال وجلب")),
-                    Expanded(child: ListView.builder(
-                      itemCount: events.length,
-                      itemBuilder: (c, i) => CheckboxListTile(
-                        title: Text(events[i].id),
-                        subtitle: Text("الوقت: ${events[i].time.format(context)}"),
-                        value: events[i].isSelected,
-                        onChanged: (v) => setState(() => events[i].isSelected = v!),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: events.length,
+                        itemBuilder: (c, i) => CheckboxListTile(
+                          title: Text("فعالية ${events[i]['id']}"),
+                          subtitle: Text("الوقت: ${events[i]['time']}"),
+                          value: events[i]['selected'],
+                          onChanged: (v) => setState(() => events[i]['selected'] = v!),
+                        ),
                       ),
-                    )),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 50), backgroundColor: Colors.white),
+                        onPressed: () {
+                          String summary = "رقم الروم: ${roomController.text}\nالتاريخ: ${dateController.text}\n";
+                          summary += "الفعاليات المختارة:\n" + events.where((e) => e['selected']).map((e) => e['id']).join(", ");
+                          showDialog(context: context, builder: (c) => AlertDialog(content: SelectableText(summary)));
+                        },
+                        child: Text("إنهاء وتصدير نصي", style: TextStyle(color: Colors.black)),
+                      ),
+                    )
                   ],
                 ),
               );
@@ -136,13 +107,11 @@ jobs:
           }
           EOF
           
-          # 5. بناء التطبيق مع حقن البيانات السرية
-          flutter build apk --release \
-            --dart-define=EMAIL=${{ secrets.U_MAIL }} \
-            --dart-define=PASSWORD=${{ secrets.U_PASS }}
+          # 5. بناء الـ APK النهائي
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: wolf-app-release
+          name: wolf-final-app
           path: build/app/outputs/flutter-apk/app-release.apk

@@ -8,7 +8,9 @@ class WolfApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF13211E)),
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF13211E), // لون خلفية تطبيقك الأصلي
+      ),
       home: const EventManagerScreen(),
     );
   }
@@ -21,15 +23,15 @@ class EventManagerScreen extends StatefulWidget {
 }
 
 class _EventManagerScreenState extends State<EventManagerScreen> {
-  // القائمة الآن فارغة تماماً ولن تعرض "فعالية 753729" أبداً بشكل تلقائي
+  // القائمة فارغة تماماً الآن لمنع تكرار الواجهة القديمة
   List<Map<String, String>> _dynamicEvents = [];
-  final TextEditingController _textController = TextEditingController();
+  final TextEditingController _pasteController = TextEditingController();
 
-  // الدالة التي تحول النص الملصق إلى بيانات حقيقية وتعرضها فوراً
-  void _updateUIWithNewData(String rawText) {
+  // دالة ذكية لتحليل النص المنسوخ من سجلات GitHub الناجحة
+  void _updateWithNewData(String rawText) {
     final List<Map<String, String>> newResults = [];
     
-    // هذا التعبير يبحث عن النمط المطبوع في سجلات GitHub الخاصة بك
+    // هذا التعبير يبحث عن النمط المنسوخ: 【 الاسم 】 والوقت والـ ID
     final RegExp regExp = RegExp(
       r"【\s*(.*?)\s*】.*?⏰ وقت البداية:\s*(.*?)\s*\n.*?🆔 ID:\s*(\d+)",
       dotAll: true,
@@ -38,13 +40,13 @@ class _EventManagerScreenState extends State<EventManagerScreen> {
     final matches = regExp.allMatches(rawText);
     for (var m in matches) {
       newResults.add({
-        'name': m.group(1) ?? 'فعالية جديدة',
+        'name': m.group(1) ?? 'فعالية',
         'time': m.group(2) ?? '00:00 AM',
         'id': m.group(3) ?? '',
       });
     }
 
-    // هنا يتم تحديث الواجهة فوراً بعد التحليل
+    // تحديث الواجهة فوراً بالبيانات الجديدة
     setState(() {
       _dynamicEvents = newResults;
     });
@@ -58,54 +60,148 @@ class _EventManagerScreenState extends State<EventManagerScreen> {
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // أضفت زر اللصق في الـ AppBar ليكون مستقلاً وواضحاً جداً
         actions: [
+          // أيقونة اللصق البنفسجية واضحة في الأعلى
           IconButton(
-            icon: const Icon(Icons.paste_rounded, color: Color(0xFF9E86FF), size: 30),
-            onPressed: () => _showInputDialog(),
+            icon: const Icon(Icons.paste_rounded, color: Color(0xFF9E86FF), size: 28),
+            onPressed: () => _showPasteDialog(),
           ),
         ],
       ),
       body: Column(
         children: [
-          _buildHeaderSection(),
+          _buildHeader(),
+          const Divider(color: Colors.white12, height: 1),
           
-          const Divider(color: Colors.white24, indent: 20, endIndent: 20),
-
-          // عرض الفعاليات الحقيقية فقط
           Expanded(
             child: _dynamicEvents.isEmpty
                 ? const Center(
                     child: Text(
-                      "القائمة فارغة\nاضغط على أيقونة اللصق البنفسجية فوق ↗️",
+                      "القائمة فارغة\nأصق مخرجات JS من الأيقونة فوق ↗️",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                      style: TextStyle(color: Colors.grey, fontSize: 14),
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                     itemCount: _dynamicEvents.length,
                     itemBuilder: (context, i) => _buildEventRow(_dynamicEvents[i]),
                   ),
           ),
-
-          _buildBottomAction(),
+          
+          _buildBottomButton(),
         ],
       ),
     );
   }
 
-  // نافذة لصق النص (Dialog)
-  void _showInputDialog() {
+  // نافذة لصق البيانات
+  void _showPasteDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF252525),
-        title: const Text("أصق مخرجات JS المنسوخة"),
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text("لصق بيانات الفعاليات"),
         content: TextField(
-          controller: _textController,
+          controller: _pasteController,
           maxLines: 5,
-          style: const TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: 13),
+          decoration: const InputDecoration(
+            hintText: "أصق النص من GitHub Logs هنا...",
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9E86FF)),
+            onPressed: () {
+              _updateWithNewData(_pasteController.text);
+              Navigator.pop(ctx);
+              _pasteController.clear();
+            },
+            child: const Text("تحديث الأسماء"),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        children: [
+          Expanded(child: _infoBox("Room ID", "18432094")),
+          const SizedBox(width: 10),
+          Expanded(child: _infoBox("Date", "2026-03-08")),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoBox(String t, String v) => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      border: Border.all(color: Colors.white10),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(t, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        Text(v, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+      ],
+    ),
+  );
+
+  Widget _buildEventRow(Map<String, String> ev) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              "${ev['id']} ${ev['name']}", 
+              style: const TextStyle(fontSize: 15),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            ev['time']!, 
+            style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 15),
+          Checkbox(
+            value: true, 
+            onChanged: (v){}, 
+            activeColor: const Color(0xFF9E86FF),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomButton() => Padding(
+    padding: const EdgeInsets.all(20),
+    child: SizedBox(
+      width: double.infinity, 
+      height: 50, 
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white, 
+          foregroundColor: Colors.black, 
+          shape: const StadiumBorder(),
+        ),
+        onPressed: () {}, 
+        child: const Text("إنهاء", style: TextStyle(fontWeight: FontWeight.bold)),
+      ),
+    ),
+  );
+}
           decoration: const InputDecoration(
             hintText: "انسخ النص من GitHub Logs وضعه هنا...",
             border: OutlineInputBorder(),

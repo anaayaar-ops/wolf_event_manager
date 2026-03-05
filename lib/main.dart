@@ -1,111 +1,152 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const WolfEventManagerApp());
-}
+void main() => runApp(const WolfManagerApp());
 
-class WolfEventManagerApp extends StatelessWidget {
-  const WolfEventManagerApp({super.key});
+class WolfManagerApp extends StatelessWidget {
+  const WolfManagerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'WOLF Event Manager',
-      theme: ThemeData(
-        // استخدام سمة داكنة تناسب واجهتك الأصلية
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1A1A1A), // خلفية داكنة جداً
-        primaryColor: const Color(0xFF121212),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF121212),
-          elevation: 0,
-        ),
-        cardColor: const Color(0xFF252525), // لون البطاقات
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF13211E), // نفس لون خلفية صورك
       ),
-      home: const EventInputParserScreen(),
+      home: const WolfEventScreen(),
     );
   }
 }
 
-class EventInputParserScreen extends StatefulWidget {
-  const EventInputParserScreen({super.key});
+class WolfEventScreen extends StatefulWidget {
+  const WolfEventScreen({super.key});
 
   @override
-  State<EventInputParserScreen> createState() => _EventInputParserScreenState();
+  State<WolfEventScreen> createState() => _WolfEventScreenState();
 }
 
-class _EventInputParserScreenState extends State<EventInputParserScreen> {
-  // وحدة تحكم للنص الملصق
-  final TextEditingController _rawTextController = TextEditingController();
-  // قائمة لتخزين الفعاليات التي تم تحليلها
-  List<WOLFEvent> _parsedEvents = [];
+class _WolfEventScreenState extends State<WolfEventScreen> {
+  final List<Map<String, String>> _events = [];
+  final TextEditingController _importController = TextEditingController();
 
-  // دالة لتحليل النص الخام باستخدام التعبيرات النمطية (RegExp)
-  void _parseAndDisplayEvents() {
-    final rawText = _rawTextController.text;
-    if (rawText.isEmpty) {
-      _showError('الرجاء لصق نص الفعاليات أولاً.');
-      return;
-    }
-
-    final List<WOLFEvent> newEvents = [];
-
-    // التعبير النمطي للبحث عن نمط كل فعالية في النص
-    // يبحث عن الاسم بين قوسين 【 】، والوقت بعد ⏰، والمدة بعد ⏳، والـ ID بعد 🆔
-    final RegExp eventRegExp = RegExp(
-      r'(\d{2})-\s*【\s*(.*?)\s*】.*?⏰ وقت البداية:\s*(.*?)\s*\n.*?⏳ مدة الفعالية:\s*(.*?)\s*\n.*?🆔 ID:\s*(\d+)',
-      dotAll: true, // للسماح بالبحث عبر عدة أسطر
+  // دالة لتحويل النص الملصق إلى قائمة فعاليات
+  void _parseAndAddEvents(String rawText) {
+    final RegExp regExp = RegExp(
+      r"【\s*(.*?)\s*】.*?وقت البداية:\s*(.*?)\s*\n.*?ID:\s*(\d+)",
+      dotAll: true,
     );
 
-    final matches = eventRegExp.allMatches(rawText);
-
-    if (matches.isEmpty) {
-      _showError('لم يتم العثور على فعاليات بتنسيق مدعوم. تأكد من لصق مخرجات JS الأصلية.');
-      return;
-    }
-
-    for (var match in matches) {
-      // استخراج البيانات من المجموعات التي عثر عليها التعبير النمطي
-      final name = match.group(2)?.trim() ?? 'فعالية';
-      final time = match.group(3)?.trim() ?? '';
-      final duration = match.group(4)?.trim() ?? '';
-      final id = match.group(5)?.trim() ?? '';
-
-      newEvents.add(WOLFEvent(
-        id: id,
-        name: name,
-        time: time,
-        duration: duration,
-      ));
-    }
-
+    final matches = regExp.allMatches(rawText);
     setState(() {
-      _parsedEvents = newEvents;
+      for (var match in matches) {
+        _events.add({
+          'name': match.group(1) ?? 'فعالية',
+          'time': match.group(2) ?? '00:00 AM',
+          'id': match.group(3) ?? '000000',
+        });
+      }
     });
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
-    );
+    _importController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('WOLF Event Parser'),
-        actions: [
-          // زر للمسح السريع
-          IconButton(
-            icon: const Icon(Icons.clear_all),
-            onPressed: () {
-              _rawTextController.clear();
-              setState(() {
-                _parsedEvents = [];
-              });
-            },
+      appBar: AppBar(title: const Text('WOLF Event Manager'), backgroundColor: Colors.transparent, elevation: 0),
+      body: Column(
+        children: [
+          // حقول الإدخال كما في صورتك
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(child: _buildHeaderField("Room ID", "9969")),
+                const SizedBox(width: 10),
+                Expanded(child: _buildHeaderField("Date", "2026-03-05")),
+              ],
+            ),
           ),
+          
+          // زر لصق البيانات من GitHub
+          ElevatedButton(
+            onPressed: () => _showImportDialog(),
+            child: const Text("لصق بيانات من JS"),
+          ),
+
+          // قائمة الفعاليات المنظمة
+          Expanded(
+            child: ListView.builder(
+              itemCount: _events.length,
+              itemBuilder: (context, index) {
+                return _buildEventTile(_events[index]);
+              },
+            ),
+          ),
+          
+          // زر الإنهاء
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, shape: const StadiumBorder()),
+                onPressed: () {},
+                child: const Text("إنهاء", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderField(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          Text(value, style: const TextStyle(fontSize: 16)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventTile(Map<String, String> event) {
+    return ListTile(
+      title: Text("${event['id']} ${event['name']}"),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(event['time']!, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 10),
+          Checkbox(value: true, onChanged: (v) {}, activeColor: const Color(0xFF9E86FF)),
+        ],
+      ),
+    );
+  }
+
+  void _showImportDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("أصق مخرجات JS هنا"),
+        content: TextField(controller: _importController, maxLines: 5, decoration: const InputDecoration(border: OutlineInputBorder())),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          ElevatedButton(
+            onPressed: () {
+              _parseAndAddEvents(_importController.text);
+              Navigator.pop(context);
+            },
+            child: const Text("تحويل"),
+          ),
+        ],
+      ),
+    );
+  }
+}
         ],
       ),
       body: Padding(

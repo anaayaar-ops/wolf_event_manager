@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 
-void main() => runApp(const WolfApp());
+void main() {
+  runApp(const WolfManagerApp());
+}
 
-class WolfApp extends StatelessWidget {
-  const WolfApp({super.key});
+class WolfManagerApp extends StatelessWidget {
+  const WolfManagerApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF13211E)),
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF13211E), // لون خلفية تطبيقك الأصلي
+        primaryColor: const Color(0xFF9E86FF),
+      ),
       home: const EventManagerScreen(),
     );
   }
@@ -15,104 +22,196 @@ class WolfApp extends StatelessWidget {
 
 class EventManagerScreen extends StatefulWidget {
   const EventManagerScreen({super.key});
+
   @override
   State<EventManagerScreen> createState() => _EventManagerScreenState();
 }
 
 class _EventManagerScreenState extends State<EventManagerScreen> {
-  // هذه القائمة ستخزن الفعاليات بعد تحليلها
+  // القائمة التي ستحمل البيانات الحقيقية
   List<Map<String, String>> _events = [];
-  final TextEditingController _inputController = TextEditingController();
+  final TextEditingController _importController = TextEditingController();
 
-  // دالة ذكية لتحويل النص المنسوخ من GitHub إلى قائمة منظمة
-  void _parseAndShow(String rawText) {
-    final List<Map<String, String>> parsed = [];
-    // التعبير النمطي للبحث عن الاسم والوقت و الـ ID في نصك الأصلي
+  // الدالة السحرية التي تحلل النص القادم من GitHub/JS
+  void _parseAndShowEvents(String rawText) {
+    final List<Map<String, String>> parsedList = [];
+    
+    // التعبير النمطي للبحث عن الاسم بين 【 】 والوقت بعد ⏰ والـ ID بعد 🆔
     final RegExp regExp = RegExp(
-      r"【\s*(.*?)\s*】.*?وقت البداية:\s*(.*?)\s*\n.*?ID:\s*(\d+)",
+      r"【\s*(.*?)\s*】.*?⏰ وقت البداية:\s*(.*?)\s*\n.*?🆔 ID:\s*(\d+)",
       dotAll: true,
     );
 
     final matches = regExp.allMatches(rawText);
-    for (var m in matches) {
-      parsed.add({
-        'name': m.group(1) ?? 'فعالية',
-        'time': m.group(2) ?? '00:00 AM',
-        'id': m.group(3) ?? '',
+
+    for (var match in matches) {
+      parsedList.add({
+        'name': match.group(1) ?? 'فعالية',
+        'time': match.group(2) ?? '00:00 AM',
+        'id': match.group(3) ?? '000000',
       });
     }
 
     setState(() {
-      _events = parsed;
+      _events = parsedList;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('WOLF Event Manager'), centerTitle: true, elevation: 0, backgroundColor: Colors.transparent),
+      appBar: AppBar(
+        title: const Text('WOLF Event Manager'),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
       body: Column(
         children: [
-          _buildHeader(),
-          
-          // زر جديد للصق النتائج من GitHub
+          // الحقول العلوية (Room ID & Date)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.paste),
-              label: const Text("لصق بيانات JS الحقيقية"),
-              onPressed: () => _showImportDialog(),
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(child: _buildHeaderBox("Room ID", "18432094")),
+                const SizedBox(width: 10),
+                Expanded(child: _buildHeaderBox("Date", "2026-03-05")),
+              ],
             ),
           ),
 
-          Expanded(
-            child: _events.isEmpty 
-              ? const Center(child: Text("أصق مخرجات JS لعرض الأسماء الحقيقية"))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _events.length,
-                  itemBuilder: (context, i) => _buildEventItem(_events[i]),
-                ),
+          // زر اللصق الجديد لجلب الأسماء الحقيقية
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ElevatedButton.icon(
+              onPressed: () => _showPasteDialog(),
+              icon: const Icon(Icons.paste, color: Colors.white),
+              label: const Text("لصق مخرجات JS الحقيقية"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF9E86FF),
+                minimumSize: const Size(double.infinity, 45),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
           ),
-          
+
+          const SizedBox(height: 10),
+
+          // القائمة التي ستعرض النتائج
+          Expanded(
+            child: _events.isEmpty
+                ? const Center(child: Text("لا توجد فعاليات مضافة بعد.\nأصق مخرجات JS للأعلى.", textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)))
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _events.length,
+                    itemBuilder: (context, index) {
+                      return _buildEventItem(_events[index]);
+                    },
+                  ),
+          ),
+
+          // زر الإنهاء السفلي
           _buildBottomButton(),
         ],
       ),
     );
   }
 
-  // مخرجات تصميم البطاقة كما في صورك بالضبط
-  Widget _buildEventItem(Map<String, String> ev) {
+  // تصميم مربع Room ID و Date
+  Widget _buildHeaderBox(String label, String value) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.withOpacity(0.5)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  // تصميم الفعالية (نفس شكل صورتك بالضبط)
+  Widget _buildEventItem(Map<String, String> event) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Expanded(child: Text("${ev['id']} ${ev['name']}", style: const TextStyle(fontSize: 16))),
-          Text(ev['time']!, style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Text(
+              "${event['id']} ${event['name']}",
+              style: const TextStyle(fontSize: 15, color: Colors.white),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            event['time']!,
+            style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold),
+          ),
           const SizedBox(width: 15),
-          Checkbox(value: true, onChanged: (v){}, activeColor: const Color(0xFF9E86FF)),
+          Checkbox(
+            value: true,
+            onChanged: (v) {},
+            activeColor: const Color(0xFF9E86FF),
+          ),
         ],
       ),
     );
   }
 
-  // نافذة اللصق
-  void _showImportDialog() {
+  // زر الإنهاء في أسفل الشاشة
+  Widget _buildBottomButton() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.black,
+            shape: const StadiumBorder(),
+          ),
+          onPressed: () {},
+          child: const Text("إنهاء", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        ),
+      ),
+    );
+  }
+
+  // نافذة لصق البيانات
+  void _showPasteDialog() {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("أصق نص الـ Console هنا"),
-        content: TextField(controller: _inputController, maxLines: 5, decoration: const InputDecoration(border: OutlineInputBorder())),
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF252525),
+        title: const Text("أصق مخرجات JS المنسوخة"),
+        content: TextField(
+          controller: _importController,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            hintText: "أصق النص من GitHub Logs هنا...",
+            border: OutlineInputBorder(),
+          ),
+        ),
         actions: [
-          ElevatedButton(onPressed: () {
-            _parseAndShow(_inputController.text);
-            Navigator.pop(ctx);
-          }, child: const Text("تحليل وعرض"))
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("إلغاء")),
+          ElevatedButton(
+            onPressed: () {
+              _parseAndShowEvents(_importController.text);
+              Navigator.pop(context);
+            },
+            child: const Text("تحويل الآن"),
+          ),
         ],
       ),
     );
   }
-
-  Widget _buildHeader() { /* كود مربعات Room ID و Date كما في صورتك */ return const SizedBox(); }
-  Widget _buildBottomButton() { /* كود زر إنهاء */ return const SizedBox(); }
 }

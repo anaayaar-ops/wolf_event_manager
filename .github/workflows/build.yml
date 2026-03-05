@@ -24,22 +24,28 @@ jobs:
 
       - name: Reconstruct Project and Build
         run: |
-          # حفظ ملفاتك الأصلية مؤقتاً
+          # 1. إنشاء مجلد مؤقت وحفظ ملفاتك بداخله
           mkdir temp_files
-          cp lib/main.dart temp_files/
-          cp pubspec.yaml temp_files/
+          # البحث عن ملف main.dart ونسخه بغض النظر عن مكانه
+          find . -name "main.dart" -exec cp {} temp_files/ \;
+          cp pubspec.yaml temp_files/ || echo "pubspec not found"
           
-          # مسح المجلد لتهيئته من جديد بشكل صحيح
+          # 2. تنظيف المستودع لتهيئته من جديد
+          # حفظ المجلد المؤقت وملف الوورك فلو من الحذف
+          mv temp_files ../
+          mv .github ../
           rm -rf *
+          mv ../temp_files .
+          mv ../.github .
           
-          # إنشاء مشروع فلاتر جديد بنفس الاسم
-          flutter create --project-name wolf_event_manager .
+          # 3. إنشاء مشروع فلاتر جديد
+          flutter create --project-name wolf_event_manager --offline .
           
-          # إعادة ملفاتك الأصلية للمشروع الجديد
+          # 4. إعادة ملفاتك البرمجية للمكان الصحيح
           cp temp_files/main.dart lib/
           cp temp_files/pubspec.yaml .
           
-          # تحميل المكتبات وبناء التطبيق
+          # 5. تحميل المكتبات وبناء التطبيق
           flutter pub get
           flutter build apk --release
 

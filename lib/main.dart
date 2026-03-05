@@ -1,224 +1,183 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:web_socket_channel/io.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
-// استقبال البيانات السرية من GitHub Secrets أثناء البناء
-const String uMail = String.fromEnvironment('EMAIL');
-const String uPass = String.fromEnvironment('PASSWORD');
-
-void main() => runApp(WolfDirectApp());
-
-class WolfDirectApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+void main() => runApp(MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0D3D33),
+        scaffoldBackgroundColor: const Color(0xFF14302C), // اللون الأخضر الداكن المفضل لك
+        primaryColor: Colors.tealAccent,
       ),
-      home: WolfWSNavigator(),
-    );
-  }
-}
+      home: WolfEventPro(),
+    ));
 
 class EventItem {
-  final String id;
-  final String name;
+  String id;
   TimeOfDay time;
-  final int duration;
   bool isSelected;
 
-  EventItem({
-    required this.id, 
-    required this.name, 
-    required this.time, 
-    required this.duration, 
-    this.isSelected = true
-  });
+  EventItem({required this.id, required this.time, this.isSelected = true});
 }
 
-class WolfWSNavigator extends StatefulWidget {
+class WolfEventPro extends StatefulWidget {
   @override
-  _WolfWSNavigatorState createState() => _WolfWSNavigatorState();
+  _WolfEventProState createState() => _WolfEventProState();
 }
 
-class _WolfWSNavigatorState extends State<WolfWSNavigator> {
-  final TextEditingController roomController = TextEditingController();
-  final TextEditingController dateController = TextEditingController();
+class _WolfEventProState extends State<WolfEventPro> {
+  // استخدام رقم الروم الافتراضي من مشروعك السابق
+  final TextEditingController roomController = TextEditingController(text: "18432094");
+  DateTime selectedDate = DateTime.now();
   List<EventItem> events = [];
   bool isLoading = false;
-  IOWebSocketChannel? channel;
 
-  // القائمة من بوت الـ JS الخاص بك
-  final List<String> eventNames = [
-    "سوالف وافكار", "تحديات", "ساعة تسلية", "شغّل عقلك", "سوالف ونقاشات", "لعب وطرب", 
-    "خمن الرقم", "سوالف صباحيه", "تحديات خليجنا ذوق", "تحديات ذهنية", "تحدي التخمين", 
-    "صباحيات خليجنا ذوق", "تصادمات رقمية", "جيبها بالثانيه", "سوالف والعاب", "تحدي سهم",
-    "فـ الصحيح", "رتب الحروف", "جلسات حوارية", "منوعات", "تحدي كرة", "سوالف خليجنا ذوق",
-    "تحديات منوعة", "تحديات رقمية", "ساعه نقاش", "فقرات منوعة", "أرقام الحظ", "تحدي الزمن",
-    "سوالف ليل", "تحدي الأرقام", "تحديات بوتات", "صناديق الحظ"
-  ];
-
-  void connectAndFetch() {
-    if (roomController.text.isEmpty || dateController.text.isEmpty) return;
+  // دالة الاتصال بكود الـ JS (الـ API) الخاص بك
+  Future<void> fetchFromJS() async {
+    if (roomController.text.isEmpty) return;
 
     setState(() => isLoading = true);
-    
+    String formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
+
     try {
-      channel = IOWebSocketChannel.connect('wss://v3.palringo.com:443');
+      // استبدل هذا الرابط برابط السيرفر الذي يشغل كود الـ JS الخاص بك
+      final url = Uri.parse('https://your-js-server.com/get-events?room=${roomController.text}&date=$formattedDate');
+      final response = await http.get(url);
 
-      // تسجيل الدخول بالبيانات السرية
-      var loginPayload = {
-        "headers": {"version": 3},
-        "body": {
-          "onlineState": 1,
-          "username": uMail,
-          "password": uPass
-        },
-        "type": "security login"
-      };
-      channel!.sink.add(jsonEncode(loginPayload));
-
-      channel!.stream.listen((message) {
-        var response = jsonDecode(message);
-        
-        if (response['type'] == 'security login success' || response['type'] == 'welcome') {
-          _requestEvents();
-        }
-
-        if (response['type'] == 'group event list') {
-          _processEvents(response['body']);
-        }
-      }, onError: (err) {
-        setState(() => isLoading = false);
-        _showError("خطأ في الاتصال");
-      });
+      if (response.statusCode == 200) {
+        List data = json.decode(response.body);
+        setState(() {
+          events = data.map((e) => EventItem(
+            id: e['id'].toString(),
+            time: TimeOfDay(hour: int.parse(e['hour']), minute: int.parse(e['minute'])),
+          )).toList();
+        });
+        _showSnackBar("تم جلب ${events.length} فعالية بنجاح");
+      } else {
+        _showSnackBar("فشل الجلب: تأكد من تشغيل كود الـ JS");
+      }
     } catch (e) {
+      _showSnackBar("خطأ في الاتصال بالسيرفر");
+    } finally {
       setState(() => isLoading = false);
     }
   }
 
-  void _requestEvents() {
-    var eventRequest = {
-      "body": {
-        "id": int.parse(roomController.text),
-        "languageId": 1,
-        "subscribe": true
-      },
-      "type": "group event list"
-    };
-    channel!.sink.add(jsonEncode(eventRequest));
+  // اختيار التاريخ من التقويم
+  Future<void> _selectDate() async {
+    DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2025),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) setState(() => selectedDate = picked);
   }
 
-  void _processEvents(List data) {
-    List<EventItem> fetchedEvents = [];
-    String targetDate = dateController.text;
-
-    for (var i = 0; i < data.length; i++) {
-      var ev = data[i];
-      var startTimeStr = ev['startsAt'];
-      var endTimeStr = ev['endsAt'];
-      
-      // توقيت السعودية UTC+3
-      DateTime startTime = DateTime.parse(startTimeStr).toUtc().add(Duration(hours: 3));
-      DateTime endTime = DateTime.parse(endTimeStr).toUtc().add(Duration(hours: 3));
-
-      String dateStr = DateFormat('yyyy-MM-dd').format(startTime);
-
-      if (dateStr == targetDate) {
-        int duration = endTime.difference(startTime).inMinutes;
-        
-        fetchedEvents.add(EventItem(
-          id: ev['id'].toString(),
-          name: i < eventNames.length ? eventNames[i] : "فعالية إضافية",
-          time: TimeOfDay(hour: startTime.hour, minute: startTime.minute),
-          duration: duration,
-        ));
-      }
-    }
-
-    setState(() {
-      events = fetchedEvents;
-      isLoading = false;
-      channel?.sink.close();
-    });
+  // تعديل الوقت يدويًا لكل فعالية
+  Future<void> _editTime(int index) async {
+    TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: events[index].time,
+    );
+    if (picked != null) setState(() => events[index].time = picked);
   }
 
-  void _showError(String msg) {
+  void _showSnackBar(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(child: _buildEventList()),
-            if (events.isNotEmpty) _buildFooterButton(),
-          ],
-        ),
+      appBar: AppBar(
+        title: Text("WOLF Event Manager"),
+        centerTitle: true,
+        actions: [if (isLoading) Center(child: Padding(padding: EdgeInsets.all(15), child: CircularProgressIndicator(strokeWidth: 2)) )],
       ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
+      body: Column(
         children: [
-          Row(
-            children: [
-              Expanded(child: TextField(controller: roomController, decoration: InputDecoration(labelText: "رقم الروم", border: OutlineInputBorder()))),
-              SizedBox(width: 10),
-              Expanded(child: TextField(controller: dateController, decoration: InputDecoration(labelText: "YYYY-MM-DD", border: OutlineInputBorder()))),
-            ],
+          // لوحة التحكم العلوية
+          Padding(
+            padding: const EdgeInsets.all(15.0),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: roomController, decoration: InputDecoration(labelText: "Room ID", border: OutlineInputBorder()))),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: InkWell(
+                        onTap: _selectDate,
+                        child: InputDecorator(
+                          decoration: InputDecoration(labelText: "Date", border: OutlineInputBorder()),
+                          child: Text(DateFormat('yyyy-MM-dd').format(selectedDate)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 10),
+                ElevatedButton.icon(
+                  onPressed: isLoading ? null : fetchFromJS,
+                  icon: Icon(Icons.refresh),
+                  label: Text("جلب الفعاليات عبر الـ JS"),
+                  style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 45)),
+                )
+              ],
+            ),
           ),
-          SizedBox(height: 10),
-          ElevatedButton(
-            onPressed: isLoading ? null : connectAndFetch,
-            child: isLoading ? CircularProgressIndicator(color: Colors.white) : Text("اتصال وجلب الفعاليات"),
-            style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 50)),
+          
+          // قائمة الفعاليات
+          Expanded(
+            child: events.isEmpty 
+              ? Center(child: Text("اضغط جلب لسحب البيانات من البوت"))
+              : ListView.builder(
+                  itemCount: events.length,
+                  itemBuilder: (c, i) => CheckboxListTile(
+                    activeColor: Colors.tealAccent,
+                    title: Row(
+                      children: [
+                        Text("ID: ${events[i].id}"),
+                        Spacer(),
+                        TextButton(
+                          style: TextButton.styleFrom(backgroundColor: Colors.black26),
+                          onPressed: () => _editTime(i),
+                          child: Text(events[i].time.format(context), style: TextStyle(color: Colors.yellowAccent)),
+                        ),
+                      ],
+                    ),
+                    value: events[i].isSelected,
+                    onChanged: (v) => setState(() => events[i].isSelected = v!),
+                  ),
+                ),
+          ),
+
+          // زر الإنهاء والنسخ
+          if (events.isNotEmpty) Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: Size(double.infinity, 60),
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
+              onPressed: () {
+                String report = "تقرير فعاليات الروم: ${roomController.text}\nالتاريخ: ${DateFormat('yyyy-MM-dd').format(selectedDate)}\n";
+                report += "-------------------\n";
+                report += events.where((e) => e.isSelected).map((e) => "ID: ${e.id} | الوقت: ${e.time.format(context)}").join("\n");
+                
+                Clipboard.setData(ClipboardData(text: report)); // نسخ تلقائي
+                _showSnackBar("تم نسخ الجدول للحافظة!");
+                
+                showDialog(context: context, builder: (c) => AlertDialog(title: Text("التقرير النهائي"), content: SelectableText(report)));
+              },
+              child: Text("تأكيد ونسخ الجدول", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18)),
+            ),
           )
         ],
       ),
     );
-  }
-
-  Widget _buildEventList() {
-    if (events.isEmpty && !isLoading) return Center(child: Text("أدخل البيانات واضغط جلب"));
-    return ListView.builder(
-      itemCount: events.length,
-      itemBuilder: (context, index) {
-        return CheckboxListTile(
-          title: Text(events[index].name),
-          subtitle: Text("ID: ${events[index].id} | وقت: ${events[index].time.format(context)}"),
-          value: events[index].isSelected,
-          onChanged: (v) => setState(() => events[index].isSelected = v!),
-        );
-      },
-    );
-  }
-
-  Widget _buildFooterButton() {
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: ElevatedButton(
-        onPressed: _showSummary,
-        child: Text("تأكيد ونسخ المستند"),
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, minimumSize: Size(double.infinity, 50)),
-      ),
-    );
-  }
-
-  void _showSummary() {
-    String summary = "تقرير فعاليات الروم: ${roomController.text}\nالتاريخ: ${dateController.text}\n";
-    summary += "-------------------\n";
-    for (var e in events.where((element) => element.isSelected)) {
-      summary += "ID: ${e.id} | ${e.name} | الوقت: ${e.time.format(context)}\n";
-    }
-    showDialog(context: context, builder: (context) => AlertDialog(title: Text("المستند"), content: SelectableText(summary), actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text("إغلاق"))]));
   }
 }

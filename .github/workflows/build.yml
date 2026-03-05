@@ -10,70 +10,97 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      - name: Final Build Structure
+      - name: Interactive Build
         run: |
-          # 1. تنظيف شامل
           rm -rf *
+          flutter create --project-name wolf_manager .
+          flutter pub add intl
           
-          # 2. إنشاء مشروع Flutter جديد
-          flutter create --project-name wolf_event_manager .
-          
-          # 3. إضافة المكتبات الضرورية
-          flutter pub add intl http
-          
-          # 4. كتابة كود الواجهة (الذي عدلناه معاً)
-          # سأقوم بكتابة نسخة مبسطة ومستقرة جداً لضمان العمل
           cat << 'EOF' > lib/main.dart
           import 'package:flutter/material.dart';
           import 'package:intl/intl.dart';
 
           void main() => runApp(MaterialApp(
             debugShowCheckedModeBanner: false,
-            theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF0D3D33)),
-            home: WolfApp(),
+            theme: ThemeData.dark().copyWith(
+              scaffoldBackgroundColor: const Color(0xFF14302C),
+              primaryColor: Colors.tealAccent,
+            ),
+            home: WolfInteractiveApp(),
           ));
 
-          class WolfApp extends StatefulWidget {
-            @override
-            _WolfAppState createState() => _WolfAppState();
+          class EventItem {
+            String id;
+            TimeOfDay time;
+            bool isSelected;
+            EventItem({required this.id, required this.time, this.isSelected = true});
           }
 
-          class _WolfAppState extends State<WolfApp> {
+          class WolfInteractiveApp extends StatefulWidget {
+            @override
+            _WolfInteractiveAppState createState() => _WolfInteractiveAppState();
+          }
+
+          class _WolfInteractiveAppState extends State<WolfInteractiveApp> {
             final TextEditingController roomController = TextEditingController(text: "9969");
-            final TextEditingController dateController = TextEditingController(text: "2026-03-05");
-            
-            // بيانات تجريبية (سيتم ربطها بالبوت لاحقاً)
-            List<Map<String, dynamic>> events = [
-              {"id": "753729", "time": "12:00 AM", "selected": true},
-              {"id": "753730", "time": "12:45 AM", "selected": false},
-              {"id": "753731", "time": "1:10 AM", "selected": true},
+            DateTime selectedDate = DateTime.now();
+            List<EventItem> events = [
+              EventItem(id: "753729", time: TimeOfDay(hour: 0, minute: 0)),
+              EventItem(id: "753730", time: TimeOfDay(hour: 0, minute: 45)),
+              EventItem(id: "753731", time: TimeOfDay(hour: 1, minute: 10)),
             ];
+
+            // دالة اختيار التاريخ من التقويم
+            Future<void> _pickDate() async {
+              DateTime? picked = await showDatePicker(
+                context: context,
+                initialDate: selectedDate,
+                firstDate: DateTime(2025),
+                lastDate: DateTime(2030),
+              );
+              if (picked != null) setState(() => selectedDate = picked);
+            }
+
+            // دالة تعديل وقت الفعالية من الساعة
+            Future<void> _pickTime(int index) async {
+              TimeOfDay? picked = await showTimePicker(
+                context: context,
+                initialTime: events[index].time,
+              );
+              if (picked != null) setState(() => events[index].time = picked);
+            }
 
             @override
             Widget build(BuildContext context) {
               return Scaffold(
-                appBar: AppBar(title: Text("WOLF Event Manager"), backgroundColor: Colors.transparent),
+                appBar: AppBar(title: Text("WOLF Event Manager"), centerTitle: true, elevation: 0),
                 body: Column(
                   children: [
                     Padding(
                       padding: const EdgeInsets.all(15.0),
                       child: Row(
                         children: [
-                          Expanded(child: TextField(controller: roomController, decoration: InputDecoration(labelText: "Room ID"))),
+                          Expanded(child: TextField(controller: roomController, decoration: InputDecoration(labelText: "Room ID", border: OutlineInputBorder()))),
                           SizedBox(width: 10),
-                          Expanded(child: TextField(controller: dateController, decoration: InputDecoration(labelText: "Date"))),
+                          Expanded(
+                            child: InkWell(
+                              onTap: _pickDate,
+                              child: InputDecorator(
+                                decoration: InputDecoration(labelText: "Date", border: OutlineInputBorder()),
+                                child: Text(DateFormat('yyyy-MM-dd').format(selectedDate)),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -81,23 +108,37 @@ jobs:
                       child: ListView.builder(
                         itemCount: events.length,
                         itemBuilder: (c, i) => CheckboxListTile(
-                          title: Text("فعالية ${events[i]['id']}"),
-                          subtitle: Text("الوقت: ${events[i]['time']}"),
-                          value: events[i]['selected'],
-                          onChanged: (v) => setState(() => events[i]['selected'] = v!),
+                          activeColor: Colors.tealAccent,
+                          title: Row(
+                            children: [
+                              Text("فعالية ${events[i].id}"),
+                              Spacer(),
+                              ActionChip(
+                                label: Text(events[i].time.format(context), style: TextStyle(color: Colors.yellowAccent)),
+                                backgroundColor: Colors.black26,
+                                onTap: () => _pickTime(i),
+                              ),
+                            ],
+                          ),
+                          value: events[i].isSelected,
+                          onChanged: (v) => setState(() => events[i].isSelected = v!),
                         ),
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.all(20.0),
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 50), backgroundColor: Colors.white),
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 55),
+                          backgroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        ),
                         onPressed: () {
-                          String summary = "رقم الروم: ${roomController.text}\nالتاريخ: ${dateController.text}\n";
-                          summary += "الفعاليات المختارة:\n" + events.where((e) => e['selected']).map((e) => e['id']).join(", ");
+                          String summary = "رقم الروم: ${roomController.text}\nالتاريخ: ${DateFormat('yyyy-MM-dd').format(selectedDate)}\n";
+                          summary += "الفعاليات:\n" + events.where((e) => e.isSelected).map((e) => "${e.id} @ ${e.time.format(context)}").join("\n");
                           showDialog(context: context, builder: (c) => AlertDialog(content: SelectableText(summary)));
                         },
-                        child: Text("إنهاء وتصدير نصي", style: TextStyle(color: Colors.black)),
+                        child: Text("إنهاء وتصدير نصي", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                       ),
                     )
                   ],
@@ -106,6 +147,14 @@ jobs:
             }
           }
           EOF
+          
+          flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolf-pro-app
+          path: build/app/outputs/flutter-apk/app-release.apk
           
           # 5. بناء الـ APK النهائي
           flutter build apk --release

@@ -113,6 +113,61 @@ jobs:
                             children: [
                               Text("فعالية ${events[i].id}"),
                               Spacer(),
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  backgroundColor: Colors.black26,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onPressed: () => _pickTime(i),
+                                child: Text(
+                                  events[i].time.format(context),
+                                  style: TextStyle(color: Colors.yellowAccent),
+                                ),
+                              ),
+                            ],
+                          ),
+                          value: events[i].isSelected,
+                          onChanged: (v) => setState(() => events[i].isSelected = v!),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 55),
+                          backgroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        ),
+                        onPressed: () {
+                          String summary = "رقم الروم: ${roomController.text}\nالتاريخ: ${DateFormat('yyyy-MM-dd').format(selectedDate)}\n";
+                          summary += "الفعاليات المختارة:\n" + events.where((e) => e.isSelected).map((e) => "${e.id} @ ${e.time.format(context)}").join("\n");
+                          showDialog(context: context, builder: (c) => AlertDialog(content: SelectableText(summary)));
+                        },
+                        child: Text("إنهاء وتصدير نصي", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  ],
+                ),
+              );
+            }
+          }
+          EOF
+          
+          flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolf-app-fixed
+          path: build/app/outputs/flutter-apk/app-release.apk
+                        itemCount: events.length,
+                        itemBuilder: (c, i) => CheckboxListTile(
+                          activeColor: Colors.tealAccent,
+                          title: Row(
+                            children: [
+                              Text("فعالية ${events[i].id}"),
+                              Spacer(),
                               ActionChip(
                                 label: Text(events[i].time.format(context), style: TextStyle(color: Colors.yellowAccent)),
                                 backgroundColor: Colors.black26,

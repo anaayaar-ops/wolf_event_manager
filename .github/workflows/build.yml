@@ -58,9 +58,10 @@ jobs:
               EventItem(id: "753729", time: TimeOfDay(hour: 0, minute: 0)),
               EventItem(id: "753730", time: TimeOfDay(hour: 0, minute: 45)),
               EventItem(id: "753731", time: TimeOfDay(hour: 1, minute: 10)),
+              EventItem(id: "753732", time: TimeOfDay(hour: 2, minute: 15)),
+              EventItem(id: "753733", time: TimeOfDay(hour: 3, minute: 00)),
             ];
 
-            // دالة اختيار التاريخ من التقويم
             Future<void> _pickDate() async {
               DateTime? picked = await showDatePicker(
                 context: context,
@@ -71,7 +72,6 @@ jobs:
               if (picked != null) setState(() => selectedDate = picked);
             }
 
-            // دالة تعديل وقت الفعالية من الساعة
             Future<void> _pickTime(int index) async {
               TimeOfDay? picked = await showTimePicker(
                 context: context,
@@ -135,7 +135,7 @@ jobs:
                         ),
                         onPressed: () {
                           String summary = "رقم الروم: ${roomController.text}\nالتاريخ: ${DateFormat('yyyy-MM-dd').format(selectedDate)}\n";
-                          summary += "الفعاليات:\n" + events.where((e) => e.isSelected).map((e) => "${e.id} @ ${e.time.format(context)}").join("\n");
+                          summary += "الفعاليات المختارة:\n" + events.where((e) => e.isSelected).map((e) => "${e.id} @ ${e.time.format(context)}").join("\n");
                           showDialog(context: context, builder: (c) => AlertDialog(content: SelectableText(summary)));
                         },
                         child: Text("إنهاء وتصدير نصي", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -153,14 +153,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: wolf-pro-app
-          path: build/app/outputs/flutter-apk/app-release.apk
-          
-          # 5. بناء الـ APK النهائي
-          flutter build apk --release
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: wolf-final-app
+          name: wolf-app-final
           path: build/app/outputs/flutter-apk/app-release.apk

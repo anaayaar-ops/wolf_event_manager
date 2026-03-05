@@ -1,0 +1,19 @@
+name: wolf_event_manager
+description: A new Flutter project for managing WOLF events.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  url_launcher: ^6.2.5 # المكتبة المسؤولة عن فتح الرابط النهائي
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

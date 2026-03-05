@@ -22,27 +22,28 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Reconstruct Project and Build
+      - name: Clean and Reconstruct Project
         run: |
-          # 1. حفظ كود البرمجة فقط
-          mkdir -p temp_files
-          find . -name "main.dart" -exec cp {} temp_files/ \;
+          # 1. إنشاء مجلد خارجي تماماً لحفظ كود الواجهة
+          mkdir -p ../backup_dir
+          # نسخ الملف فقط إذا كان موجوداً في lib/main.dart لضمان عدم التكرار
+          [ -f lib/main.dart ] && cp lib/main.dart ../backup_dir/main.dart || find . -name "main.dart" -exec cp {} ../backup_dir/main.dart \;
           
-          # 2. تنظيف شامل للمجلد
-          mv .github ../
+          # 2. تنظيف شامل للمجلد الحالي
+          mv .github ../backup_workflow
           rm -rf *
-          mv ../.github .
+          mv ../backup_workflow .github
           
-          # 3. إنشاء مشروع جديد نظيف تماماً لضمان عدم تعارض المكتبات
+          # 3. إنشاء مشروع جديد كلياً وبإصدارات متوافقة تلقائياً
           flutter create --project-name wolf_event_manager --offline .
           
-          # 4. إضافة المكتبة المطلوبة لفتح الروابط برمجياً
+          # 4. إضافة المكتبة المطلوبة بشكل نظيف
           flutter pub add url_launcher
           
-          # 5. استبدال كود الواجهة بكودك الخاص
-          cp temp_files/main.dart lib/
+          # 5. استرجاع كود الواجهة الخاص بك
+          cp ../backup_dir/main.dart lib/main.dart
           
-          # 6. تحديث المكتبات وبناء الـ APK
+          # 6. تحديث المكتبات وبناء التطبيق
           flutter pub get
           flutter build apk --release
 

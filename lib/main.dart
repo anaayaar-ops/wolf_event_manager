@@ -1,44 +1,153 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:web_socket_channel/io.dart';
+import 'package:intl/intl.dart';
 
-void main() => runApp(WolfApp());
+// استقبال البيانات السرية من GitHub Secrets أثناء البناء
+const String uMail = String.fromEnvironment('EMAIL');
+const String uPass = String.fromEnvironment('PASSWORD');
 
-class WolfApp extends StatelessWidget {
+void main() => runApp(WolfDirectApp());
+
+class WolfDirectApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0D3D33), // لون الخلفية من صورتك
+        scaffoldBackgroundColor: const Color(0xFF0D3D33),
       ),
-      home: EventScreen(),
+      home: WolfWSNavigator(),
     );
   }
 }
 
 class EventItem {
-  String id;
+  final String id;
+  final String name;
   TimeOfDay time;
+  final int duration;
   bool isSelected;
-  EventItem({required this.id, required this.time, this.isSelected = true});
+
+  EventItem({
+    required this.id, 
+    required this.name, 
+    required this.time, 
+    required this.duration, 
+    this.isSelected = true
+  });
 }
 
-class EventScreen extends StatefulWidget {
+class WolfWSNavigator extends StatefulWidget {
   @override
-  _EventScreenState createState() => _EventScreenState();
+  _WolfWSNavigatorState createState() => _WolfWSNavigatorState();
 }
 
-class _EventScreenState extends State<EventScreen> {
-  // حقول قابلة للتعديل
-  TextEditingController roomController = TextEditingController(text: "9969");
-  TextEditingController dateController = TextEditingController(text: "12/3/2026");
+class _WolfWSNavigatorState extends State<WolfWSNavigator> {
+  final TextEditingController roomController = TextEditingController();
+  final TextEditingController dateController = TextEditingController();
+  List<EventItem> events = [];
+  bool isLoading = false;
+  IOWebSocketChannel? channel;
 
-  List<EventItem> events = [
-    EventItem(id: "753729", time: TimeOfDay(hour: 0, minute: 0)),
-    EventItem(id: "753730", time: TimeOfDay(hour: 0, minute: 45)),
-    EventItem(id: "753731", time: TimeOfDay(hour: 1, minute: 30)),
-    EventItem(id: "753732", time: TimeOfDay(hour: 2, minute: 15)),
-    EventItem(id: "753733", time: TimeOfDay(hour: 3, minute: 00)),
+  // القائمة من بوت الـ JS الخاص بك
+  final List<String> eventNames = [
+    "سوالف وافكار", "تحديات", "ساعة تسلية", "شغّل عقلك", "سوالف ونقاشات", "لعب وطرب", 
+    "خمن الرقم", "سوالف صباحيه", "تحديات خليجنا ذوق", "تحديات ذهنية", "تحدي التخمين", 
+    "صباحيات خليجنا ذوق", "تصادمات رقمية", "جيبها بالثانيه", "سوالف والعاب", "تحدي سهم",
+    "فـ الصحيح", "رتب الحروف", "جلسات حوارية", "منوعات", "تحدي كرة", "سوالف خليجنا ذوق",
+    "تحديات منوعة", "تحديات رقمية", "ساعه نقاش", "فقرات منوعة", "أرقام الحظ", "تحدي الزمن",
+    "سوالف ليل", "تحدي الأرقام", "تحديات بوتات", "صناديق الحظ"
   ];
+
+  void connectAndFetch() {
+    if (roomController.text.isEmpty || dateController.text.isEmpty) return;
+
+    setState(() => isLoading = true);
+    
+    try {
+      channel = IOWebSocketChannel.connect('wss://v3.palringo.com:443');
+
+      // تسجيل الدخول بالبيانات السرية
+      var loginPayload = {
+        "headers": {"version": 3},
+        "body": {
+          "onlineState": 1,
+          "username": uMail,
+          "password": uPass
+        },
+        "type": "security login"
+      };
+      channel!.sink.add(jsonEncode(loginPayload));
+
+      channel!.stream.listen((message) {
+        var response = jsonDecode(message);
+        
+        if (response['type'] == 'security login success' || response['type'] == 'welcome') {
+          _requestEvents();
+        }
+
+        if (response['type'] == 'group event list') {
+          _processEvents(response['body']);
+        }
+      }, onError: (err) {
+        setState(() => isLoading = false);
+        _showError("خطأ في الاتصال");
+      });
+    } catch (e) {
+      setState(() => isLoading = false);
+    }
+  }
+
+  void _requestEvents() {
+    var eventRequest = {
+      "body": {
+        "id": int.parse(roomController.text),
+        "languageId": 1,
+        "subscribe": true
+      },
+      "type": "group event list"
+    };
+    channel!.sink.add(jsonEncode(eventRequest));
+  }
+
+  void _processEvents(List data) {
+    List<EventItem> fetchedEvents = [];
+    String targetDate = dateController.text;
+
+    for (var i = 0; i < data.length; i++) {
+      var ev = data[i];
+      var startTimeStr = ev['startsAt'];
+      var endTimeStr = ev['endsAt'];
+      
+      // توقيت السعودية UTC+3
+      DateTime startTime = DateTime.parse(startTimeStr).toUtc().add(Duration(hours: 3));
+      DateTime endTime = DateTime.parse(endTimeStr).toUtc().add(Duration(hours: 3));
+
+      String dateStr = DateFormat('yyyy-MM-dd').format(startTime);
+
+      if (dateStr == targetDate) {
+        int duration = endTime.difference(startTime).inMinutes;
+        
+        fetchedEvents.add(EventItem(
+          id: ev['id'].toString(),
+          name: i < eventNames.length ? eventNames[i] : "فعالية إضافية",
+          time: TimeOfDay(hour: startTime.hour, minute: startTime.minute),
+          duration: duration,
+        ));
+      }
+    }
+
+    setState(() {
+      events = fetchedEvents;
+      isLoading = false;
+      channel?.sink.close();
+    });
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,107 +155,70 @@ class _EventScreenState extends State<EventScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // الهيدر: حقول إدخال الروم والتاريخ
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  Expanded(child: _buildInput("عضوية الروم", roomController)),
-                  SizedBox(width: 20),
-                  Expanded(child: _buildInput("التاريخ", dateController)),
-                ],
-              ),
-            ),
-            // قائمة الفعاليات
-            Expanded(
-              child: ListView.builder(
-                itemCount: events.length,
-                itemBuilder: (context, index) {
-                  return CheckboxListTile(
-                    activeColor: Colors.tealAccent,
-                    title: Row(
-                      children: [
-                        Text("${events[index].id} تبدأ ", style: TextStyle(fontSize: 16)),
-                        InkWell(
-                          onTap: () => _selectTime(index),
-                          child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(5)),
-                            child: Text(
-                              events[index].time.format(context),
-                              style: TextStyle(color: Colors.yellow, fontWeight: FontWeight.bold, fontSize: 18),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    value: events[index].isSelected,
-                    onChanged: (val) => setState(() => events[index].isSelected = val!),
-                  );
-                },
-              ),
-            ),
-            // الزر النهائي
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Color(0xFF0D3D33),
-                  minimumSize: Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                ),
-                onPressed: () => _generateSummary(),
-                child: Text("مراجعة البيانات (نص)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              ),
-            ),
+            _buildHeader(),
+            Expanded(child: _buildEventList()),
+            if (events.isNotEmpty) _buildFooterButton(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInput(String label, TextEditingController controller) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(color: Colors.white70, fontSize: 14)),
-        TextField(
-          controller: controller,
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          decoration: InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 8)),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _selectTime(int index) async {
-    final TimeOfDay? picked = await showTimePicker(
-      context: context,
-      initialTime: events[index].time,
-    );
-    if (picked != null) setState(() => events[index].time = picked);
-  }
-
-  void _generateSummary() {
-    String summary = "تقرير الفعاليات:\n";
-    summary += "الروم: ${roomController.text}\n";
-    summary += "التاريخ: ${dateController.text}\n";
-    summary += "-------------------\n";
-    
-    for (var e in events.where((element) => element.isSelected)) {
-      summary += "الفعالية: ${e.id} | الوقت: ${e.time.format(context)}\n";
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("تأكيد البيانات"),
-        content: SelectableText(summary), // يسمح لك بنسخ النص
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text("إغلاق"))
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: TextField(controller: roomController, decoration: InputDecoration(labelText: "رقم الروم", border: OutlineInputBorder()))),
+              SizedBox(width: 10),
+              Expanded(child: TextField(controller: dateController, decoration: InputDecoration(labelText: "YYYY-MM-DD", border: OutlineInputBorder()))),
+            ],
+          ),
+          SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: isLoading ? null : connectAndFetch,
+            child: isLoading ? CircularProgressIndicator(color: Colors.white) : Text("اتصال وجلب الفعاليات"),
+            style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 50)),
+          )
         ],
       ),
     );
+  }
+
+  Widget _buildEventList() {
+    if (events.isEmpty && !isLoading) return Center(child: Text("أدخل البيانات واضغط جلب"));
+    return ListView.builder(
+      itemCount: events.length,
+      itemBuilder: (context, index) {
+        return CheckboxListTile(
+          title: Text(events[index].name),
+          subtitle: Text("ID: ${events[index].id} | وقت: ${events[index].time.format(context)}"),
+          value: events[index].isSelected,
+          onChanged: (v) => setState(() => events[index].isSelected = v!),
+        );
+      },
+    );
+  }
+
+  Widget _buildFooterButton() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: ElevatedButton(
+        onPressed: _showSummary,
+        child: Text("تأكيد ونسخ المستند"),
+        style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black, minimumSize: Size(double.infinity, 50)),
+      ),
+    );
+  }
+
+  void _showSummary() {
+    String summary = "تقرير فعاليات الروم: ${roomController.text}\nالتاريخ: ${dateController.text}\n";
+    summary += "-------------------\n";
+    for (var e in events.where((element) => element.isSelected)) {
+      summary += "ID: ${e.id} | ${e.name} | الوقت: ${e.time.format(context)}\n";
+    }
+    showDialog(context: context, builder: (context) => AlertDialog(title: Text("المستند"), content: SelectableText(summary), actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text("إغلاق"))]));
   }
 }

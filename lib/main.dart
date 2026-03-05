@@ -8,9 +8,7 @@ class WolfApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF13211E), // نفس لون خلفية صورك
-      ),
+      theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF13211E)),
       home: const EventManagerScreen(),
     );
   }
@@ -23,29 +21,32 @@ class EventManagerScreen extends StatefulWidget {
 }
 
 class _EventManagerScreenState extends State<EventManagerScreen> {
-  // القائمة التي ستحتوي على الأسماء الحقيقية
-  List<Map<String, String>> _realEvents = [];
+  // القائمة الآن فارغة تماماً ولن تعرض "فعالية 753729" أبداً بشكل تلقائي
+  List<Map<String, String>> _dynamicEvents = [];
   final TextEditingController _textController = TextEditingController();
 
-  // هذه هي الدالة التي ستحول نص GitHub إلى أسماء حقيقية
-  void _processRawText(String text) {
-    final List<Map<String, String>> results = [];
+  // الدالة التي تحول النص الملصق إلى بيانات حقيقية وتعرضها فوراً
+  void _updateUIWithNewData(String rawText) {
+    final List<Map<String, String>> newResults = [];
+    
+    // هذا التعبير يبحث عن النمط المطبوع في سجلات GitHub الخاصة بك
     final RegExp regExp = RegExp(
       r"【\s*(.*?)\s*】.*?⏰ وقت البداية:\s*(.*?)\s*\n.*?🆔 ID:\s*(\d+)",
       dotAll: true,
     );
 
-    final matches = regExp.allMatches(text);
+    final matches = regExp.allMatches(rawText);
     for (var m in matches) {
-      results.add({
-        'name': m.group(1) ?? 'فعالية',
+      newResults.add({
+        'name': m.group(1) ?? 'فعالية جديدة',
         'time': m.group(2) ?? '00:00 AM',
         'id': m.group(3) ?? '',
       });
     }
 
+    // هنا يتم تحديث الواجهة فوراً بعد التحليل
     setState(() {
-      _realEvents = results;
+      _dynamicEvents = newResults;
     });
   }
 
@@ -57,108 +58,134 @@ class _EventManagerScreenState extends State<EventManagerScreen> {
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
+        // أضفت زر اللصق في الـ AppBar ليكون مستقلاً وواضحاً جداً
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.paste_rounded, color: Color(0xFF9E86FF), size: 30),
+            onPressed: () => _showInputDialog(),
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // 1. زر اللصق (وضعتُه هنا في البداية ليكون واضحاً جداً)
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.content_paste),
-              label: const Text("اضغط هنا للصق مخرجات JS"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF9E86FF), // اللون البنفسجي في تطبيقك
-                minimumSize: const Size(double.infinity, 50),
-              ),
-              onPressed: () => _showInputDialog(),
-            ),
-          ),
+          _buildHeaderSection(),
+          
+          const Divider(color: Colors.white24, indent: 20, endIndent: 20),
 
-          // 2. مربعات المعلومات (Room ID & Date)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Row(
-              children: [
-                Expanded(child: _headerBox("Room ID", "9969")),
-                const SizedBox(width: 10),
-                Expanded(child: _headerBox("Date", "2026-03-05")),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // 3. عرض الفعاليات (الحقيقية إذا وُجدت، أو رسالة تنبيه)
+          // عرض الفعاليات الحقيقية فقط
           Expanded(
-            child: _realEvents.isEmpty
-                ? const Center(child: Text("لا توجد بيانات.. اضغط على الزر البنفسجي بالأعلى"))
+            child: _dynamicEvents.isEmpty
+                ? const Center(
+                    child: Text(
+                      "القائمة فارغة\nاضغط على أيقونة اللصق البنفسجية فوق ↗️",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  )
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _realEvents.length,
-                    itemBuilder: (context, i) => _eventTile(_realEvents[i]),
+                    itemCount: _dynamicEvents.length,
+                    itemBuilder: (context, i) => _buildEventRow(_dynamicEvents[i]),
                   ),
           ),
 
-          // 4. زر الإنهاء السفلي
-          _bottomButton(),
+          _buildBottomAction(),
         ],
       ),
     );
   }
 
-  // نافذة الإدخال
+  // نافذة لصق النص (Dialog)
   void _showInputDialog() {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("أصق مخرجات JS هنا"),
+        backgroundColor: const Color(0xFF252525),
+        title: const Text("أصق مخرجات JS المنسوخة"),
         content: TextField(
           controller: _textController,
           maxLines: 5,
-          decoration: const InputDecoration(hintText: "01- 【 اسم الفعالية 】 ..."),
+          style: const TextStyle(fontSize: 12),
+          decoration: const InputDecoration(
+            hintText: "انسخ النص من GitHub Logs وضعه هنا...",
+            border: OutlineInputBorder(),
+          ),
         ),
         actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("إلغاء", style: TextStyle(color: Colors.grey)),
+          ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9E86FF)),
             onPressed: () {
-              _processRawText(_textController.text);
+              _updateUIWithNewData(_textController.text);
               Navigator.pop(ctx);
+              _textController.clear();
             },
-            child: const Text("تحديث الأسماء الآن"),
+            child: const Text("تحديث الأسماء فوراً"),
           )
         ],
       ),
     );
   }
 
-  Widget _headerBox(String label, String val) {
+  // مخرجات الصف (نفس تصميمك الأصلي)
+  Widget _buildEventRow(Map<String, String> ev) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10.0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              "${ev['id']} ${ev['name']}", 
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)
+            )
+          ),
+          Text(
+            ev['time']!, 
+            style: const TextStyle(color: Color(0xFFD4AF37), fontWeight: FontWeight.bold)
+          ),
+          const SizedBox(width: 15),
+          Checkbox(
+            value: true, 
+            onChanged: (v) {}, 
+            activeColor: const Color(0xFF9E86FF),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderSection() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        children: [
+          Expanded(child: _infoBox("Room ID", "9969")),
+          const SizedBox(width: 10),
+          Expanded(child: _infoBox("Date", "2026-03-05")),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoBox(String title, String val) {
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(border: Border.all(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-          Text(val, style: const TextStyle(fontSize: 16)),
+          Text(title, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          Text(val, style: const TextStyle(fontSize: 15)),
         ],
       ),
     );
   }
 
-  Widget _eventTile(Map<String, String> ev) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15.0),
-      child: Row(
-        children: [
-          Expanded(child: Text("${ev['id']} ${ev['name']}", style: const TextStyle(fontSize: 16))),
-          Text(ev['time']!, style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold)),
-          const SizedBox(width: 15),
-          Checkbox(value: true, onChanged: (v) {}, activeColor: const Color(0xFF9E86FF)),
-        ],
-      ),
-    );
-  }
-
-  Widget _bottomButton() {
+  Widget _buildBottomAction() {
     return Padding(
       padding: const EdgeInsets.all(20),
       child: SizedBox(

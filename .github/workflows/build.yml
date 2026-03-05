@@ -22,23 +22,121 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Reconstruct and Build
+      - name: Construct and Build
         run: |
-          # حفظ ملفاتك
-          mkdir -p temp_files
-          cp lib/main.dart temp_files/
-          cp pubspec.yaml temp_files/
-          
-          # تنظيف وبناء مشروع جديد تماماً
+          # 1. تنظيف المستودع تماماً
           rm -rf *
+          
+          # 2. إنشاء مشروع فلاتر جديد ونظيف
           flutter create --project-name wolf_event_manager .
           
-          # استبدال الملفات
-          cp temp_files/main.dart lib/
-          cp temp_files/pubspec.yaml .
+          # 3. إضافة المكتبات المطلوبة للاتصال والوقت
+          flutter pub add web_socket_channel intl
           
-          # البناء مع حقن البيانات السرية
-          flutter pub get
+          # 4. مسح الكود الافتراضي وكتابة الكود الخاص بك (الذي يتصل بـ WS)
+          # ملاحظة: سيتم سحب الكود من ملف main.dart الأصلي إذا كان موجوداً، وإلا سنعتمد على الكود الكامل
+          cat << 'EOF' > lib/main.dart
+          import 'dart:convert';
+          import 'package:flutter/material.dart';
+          import 'package:web_socket_channel/io.dart';
+          import 'package:intl/intl.dart';
+
+          const String uMail = String.fromEnvironment('EMAIL');
+          const String uPass = String.fromEnvironment('PASSWORD');
+
+          void main() => runApp(MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: ThemeData.dark().copyWith(scaffoldBackgroundColor: const Color(0xFF0D3D33)),
+            home: WolfWSNavigator(),
+          ));
+
+          class EventItem {
+            final String id;
+            final String name;
+            TimeOfDay time;
+            final int duration;
+            bool isSelected;
+            EventItem({required this.id, required this.name, required this.time, required this.duration, this.isSelected = true});
+          }
+
+          class WolfWSNavigator extends StatefulWidget {
+            @override
+            _WolfWSNavigatorState createState() => _WolfWSNavigatorState();
+          }
+
+          class _WolfWSNavigatorState extends State<WolfWSNavigator> {
+            final TextEditingController roomController = TextEditingController();
+            final TextEditingController dateController = TextEditingController();
+            List<EventItem> events = [];
+            bool isLoading = false;
+            IOWebSocketChannel? channel;
+
+            void connectAndFetch() {
+              if (roomController.text.isEmpty || dateController.text.isEmpty) return;
+              setState(() => isLoading = true);
+              try {
+                channel = IOWebSocketChannel.connect('wss://v3.palringo.com:443');
+                var loginPayload = {"headers": {"version": 3}, "body": {"onlineState": 1, "username": uMail, "password": uPass}, "type": "security login"};
+                channel!.sink.add(jsonEncode(loginPayload));
+                channel!.stream.listen((message) {
+                  var response = jsonDecode(message);
+                  if (response['type'] == 'security login success' || response['type'] == 'welcome') _requestEvents();
+                  if (response['type'] == 'group event list') _processEvents(response['body']);
+                }, onError: (err) => setState(() => isLoading = false));
+              } catch (e) { setState(() => isLoading = false); }
+            }
+
+            void _requestEvents() {
+              var req = {"body": {"id": int.parse(roomController.text), "languageId": 1, "subscribe": true}, "type": "group event list"};
+              channel!.sink.add(jsonEncode(req));
+            }
+
+            void _processEvents(List data) {
+              List<EventItem> fetched = [];
+              for (var i = 0; i < data.length; i++) {
+                var ev = data[i];
+                DateTime start = DateTime.parse(ev['startsAt']).toUtc().add(Duration(hours: 3));
+                if (DateFormat('yyyy-MM-dd').format(start) == dateController.text) {
+                  fetched.add(EventItem(id: ev['id'].toString(), name: "فعالية ${i+1}", time: TimeOfDay(hour: start.hour, minute: start.minute), duration: 45));
+                }
+              }
+              setState(() { events = fetched; isLoading = false; channel?.sink.close(); });
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(title: Text("WOLF Live Fetcher")),
+                body: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: Row(
+                        children: [
+                          Expanded(child: TextField(controller: roomController, decoration: InputDecoration(labelText: "Room ID"))),
+                          SizedBox(width: 10),
+                          Expanded(child: TextField(controller: dateController, decoration: InputDecoration(labelText: "YYYY-MM-DD"))),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton(onPressed: isLoading ? null : connectAndFetch, child: Text(isLoading ? "جاري الجلب..." : "اتصال وجلب")),
+                    Expanded(child: ListView.builder(
+                      itemCount: events.length,
+                      itemBuilder: (c, i) => CheckboxListTile(
+                        title: Text(events[i].id),
+                        subtitle: Text("الوقت: ${events[i].time.format(context)}"),
+                        value: events[i].isSelected,
+                        onChanged: (v) => setState(() => events[i].isSelected = v!),
+                      ),
+                    )),
+                  ],
+                ),
+              );
+            }
+          }
+          EOF
+          
+          # 5. بناء التطبيق مع حقن البيانات السرية
           flutter build apk --release \
             --dart-define=EMAIL=${{ secrets.U_MAIL }} \
             --dart-define=PASSWORD=${{ secrets.U_PASS }}
